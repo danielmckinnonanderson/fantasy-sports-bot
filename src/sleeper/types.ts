@@ -3,6 +3,24 @@ export type LeagueId = string;
 export type RosterId = string;
 export type DraftId = string;
 export type PlayerId = string;
+export type EmptyPlayer = null;
+export type NoTeam = null;
+
+export type NflSeasonWeek =
+  | 1 | 2 | 3 | 4 | 5 | 6
+  | 7 | 8 | 9 | 10 | 11 | 12
+  | 13 | 14 | 15 | 16 | 17 | 18;
+
+export type NflTeam =
+  | "ARI" | "ATL" | "BAL" | "BUF"
+  | "CAR" | "CHI" | "CIN" | "CLE"
+  | "DAL" | "DEN" | "DET" | "GB"
+  | "HOU" | "IND" | "JAX" | "KC"
+  | "LAC" | "LAR" | "LV"  | "MIA"
+  | "MIN" | "NE"  | "NO"  | "NYG"
+  | "NYJ" | "PHI" | "PIT" | "SEA"
+  | "SF"  | "TB"  | "TEN" | "WAS"
+  | NoTeam;
 
 export type User = {
   user_id: UserId,
@@ -56,10 +74,33 @@ export type League = {
   avatar?: string;
 };
 
-export type Position = "QB" | "WR" | "RB" | "TE" | "K" | "DEF";
-export type FantasyPosition = Position | "FLEX";
+export type SportState = {
+  week?: NflSeasonWeek;
+  season_type: "pre" | "regular" | "post";
+  season_start_date: string,
+  season: "2018" | "2019" | "2020" | "2022" | "2023" | "2024" | "2025";
+  previous_season?: "2018" | "2019" | "2020" | "2022" | "2023" | "2024" | "2025";
+  leg?: number;
+  league_season?: "2018" | "2019" | "2020" | "2022" | "2023" | "2024" | "2025";
+  league_create_season?: "2018" | "2019" | "2020" | "2022" | "2023" | "2024" | "2025";
+  display_week?: NflSeasonWeek;
+}
 
-export type Status = "Active";
+export type Position = 
+  | "QB" | "WR" | "RB" | "FB" | "TE"  | "C"   | "G"  | "T"
+  | "NT" | "DT" | "DE" | "LB" | "ILB" | "OLB" | "CB" | "FS" | "SS"
+  | "LS" | "P"  | "K";
+
+export type FantasyPosition = "QB" | "WR" | "RB" | "TE" | "K" | "FLEX" | "DEF";
+
+export type Status = 
+  | "Active" | "Inactive" | "Injured Reserve" 
+  | "Physically Unable to Perform" | "Practice Squad" 
+  | "Non Football Injury" | null;
+
+export type InjuryStatus = 
+  | "IR" | "Questionable" | "Sus" 
+  | "NA" | "OUT" | "PUP" | "DNR" | "Cov" | null;
 
 export type NflPlayer = {
   hashtag: string,
@@ -71,10 +112,10 @@ export type NflPlayer = {
   search_last_name: string;
   injury_start_date?: string;
   weight: string,
-  position: string,
+  position: Position,
   practice_participation?: string,
   sportradar_id?: string,
-  team?: string,
+  team?: NflTeam,
   last_name: string,
   college?: string,
   fantasy_data_id?: string,

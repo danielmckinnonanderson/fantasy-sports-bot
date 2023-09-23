@@ -1,8 +1,8 @@
 import { BunFile } from "bun";
 import SleeperClient from "./src/sleeper/client";
-import { AllPlayers, FantasyPosition, LeagueId, NflPlayer, Position, User, UserId } from "./src/sleeper/types";
+import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, Position, Status, User, UserId } from "./src/sleeper/types";
+import Predicates from "./src/utils";
 
-const EmptyPlayer: null = null;
 let LEAGUE_ID: LeagueId = "";
 let USER_ID: UserId = "";
 
@@ -40,6 +40,11 @@ if (USER_ID === "") {
 // Setup client & all required Sleeper data
 const client = new SleeperClient();
 
+const nflState = await client.getSportState("nfl");
+if (!nflState) {
+  throw new Error("Could not get sport state for NFL");
+}
+
 const rosters = await client.getRostersInLeague(LEAGUE_ID);
 if (!rosters) {
   throw new Error("Could not get rosters for league with ID '" + LEAGUE_ID + "'");
@@ -53,10 +58,12 @@ if (!users) {
 const allPlayers = await cachedGetPlayers(client);
 
 rosters
-  .map(rost => { return { 
-    owner_id: rost.owner_id,
-    starters: rost.starters
-  }})
+  .map(rost => { 
+    return { 
+      owner_id: rost.owner_id,
+      starters: rost.starters
+    };
+  })
   .map(ownerIdStarters  => { 
     const user: User | undefined = users.find(user => user.user_id === ownerIdStarters.owner_id);
     const team_name: string | undefined = user?.metadata.team_name;
@@ -97,11 +104,28 @@ rosters
             startingAt: lookupPosition(index)
           }
           : {
-            player: EmptyPlayer,
+            player: null as EmptyPlayer,
             startingAt: lookupPosition(index)
           };
       })
     };
+  })
+  .map(value => {
+    const empties   = value.starters.filter((st) => st.player == null as EmptyPlayer);
+    const injured   = value.starters.filter((st) => Predicates.isInjured(st.player as { injuryStatus: InjuryStatus } | EmptyPlayer));
+    const inactives = value.starters.filter((st) => Predicates.isInactive(st.player as { status: Status, availPositions: FantasyPosition[] } | EmptyPlayer));
+    const byes      = value.starters.filter((st) => Predicates.isOnBye(st.player as { team: NflTeam } | EmptyPlayer, nflState.season_type, nflState.week));
+
+    return {
+      username: value.username,
+      teamName: value.teamName,
+      invalidStarters: {
+        empties,
+        injured,
+        inactives,
+        byes
+      }
+    }
   })
   .map(result => console.dir(result, { depth: 6 }));
 
@@ -147,4 +171,6 @@ function lookupPosition(starterIndex: number): FantasyPosition {
     default: throw new Error("Tried to get a starter index which was not present given the amount of starters!");
   }
 }
+
+
 
