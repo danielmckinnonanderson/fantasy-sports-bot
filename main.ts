@@ -1,5 +1,6 @@
+import { BunFile } from "bun";
 import SleeperClient from "./src/sleeper/client";
-import { FantasyPosition, LeagueId, NflPlayer, Position, User, UserId } from "./src/sleeper/types";
+import { AllPlayers, FantasyPosition, LeagueId, NflPlayer, Position, User, UserId } from "./src/sleeper/types";
 
 const EmptyPlayer: null = null;
 let LEAGUE_ID: LeagueId = "";
@@ -25,6 +26,7 @@ for (let i = 2; i < Bun.argv.length; i++) {
   }
 }
 
+// Panic if required arguments are not provided
 if (LEAGUE_ID === "") {
   throw new Error("No league ID was passed to the executable!\n"
     + "Run the program again with arguments '--league-id <your league ID>'");
@@ -35,6 +37,7 @@ if (USER_ID === "") {
     + "Run the program again with arguments '--user-id <your user ID>'");
 }
 
+// Setup client & all required Sleeper data
 const client = new SleeperClient();
 
 const rosters = await client.getRostersInLeague(LEAGUE_ID);
@@ -47,10 +50,7 @@ if (!users) {
   throw new Error("Could not get users in league with ID '" + LEAGUE_ID + "'");
 }
 
-const allPlayers = await client.getAllPlayers("nfl");
-if (!allPlayers) {
-  throw new Error("Could not get all NFL players");
-}
+const allPlayers = await cachedGetPlayers(client);
 
 rosters
   .map(rost => { return { 
@@ -103,8 +103,28 @@ rosters
       })
     };
   })
-  .map(result => console.info(result));
+  .map(result => console.dir(result, { depth: 6 }));
 
+
+async function cachedGetPlayers(client: SleeperClient): Promise<AllPlayers> {
+  const path = "./data/all-players.json";
+  const allPlayersLocal = Bun.file(path);
+  const exists = await allPlayersLocal.exists();
+
+  // TODO - more sophisticated caching logic, to refresh the value when it goes stale. Can of worms but oh well
+  if (!exists) {
+    const players = await client.getAllPlayers("nfl");
+
+    if (!players) {
+      throw new Error("Could not get all NFL players from Sleeper API!");
+    }
+
+    const written = await Bun.write(allPlayersLocal, JSON.stringify(players, null, 2));
+    return players;
+  }
+
+  return await allPlayersLocal.json();
+}
 
 
 // TODO - Make generic per note below
