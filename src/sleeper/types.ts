@@ -57,6 +57,7 @@ export type League = {
 };
 
 export type Position = "QB" | "WR" | "RB" | "TE" | "K" | "DEF";
+export type FantasyPosition = Position | "FLEX";
 
 export type Status = "Active";
 
@@ -93,5 +94,9 @@ export type NflPlayer = {
   rotoworld_id?: string,
   search_first_name?: string,
   yahoo_id?: string,
+};
+
+export type AllPlayers = {
+  [key: PlayerId]: NflPlayer
 };
 
