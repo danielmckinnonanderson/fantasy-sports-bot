@@ -1,11 +1,10 @@
 import { Cron } from "croner";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
-import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, Position, Status, User, UserId } from "./src/sleeper/types";
+import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
 
 let LEAGUE_ID: LeagueId = "";
-let USER_ID: UserId = "";
 let BOT_ID: BotId = "";
 
 // Skip first two args since we don't care about path
@@ -16,10 +15,6 @@ for (let i = 2; i < Bun.argv.length; i++) {
   switch (value) {
     case "--league-id": {
       LEAGUE_ID = Bun.argv[i + 1];
-      break;
-    };
-    case "--user-id": {
-      USER_ID = Bun.argv[i + 1];
       break;
     };
     case "--bot-id": {
@@ -38,11 +33,6 @@ if (LEAGUE_ID === "") {
     + "Run the program again with arguments '--league-id <your league ID>'");
 }
 
-if (USER_ID === "") {
-  throw new Error("No user ID was passed to the executable!\n"
-    + "Run the program again with arguments '--user-id <your user ID>'");
-}
-
 if (BOT_ID === "") {
   throw new Error("No bot ID was passed to the executable!\n"
     + "Run the program again with arguments '--bot-id <your user ID>'");
@@ -53,15 +43,44 @@ const slpClient = new SleeperClient();
 const msgClient = new GroupmeClient(BOT_ID);
 
 // Finally, setup cron job timings
-const next = "50 20 * * 6";
+const sundayMorning = "0 11 * * 0";
+const sundayPrimetime = "30 18 * * 0";
+const mondayPrimetime = "15 18 * 9-12 1";
+const thursPrimeTime = "15 18 * 9-12 4";
 
-const job = Cron(next, {
-  name: "Roster check Saturday at 8:50pm",
-  timezone: "US/Central"
-}, async () => {
-  console.info("Running check...");
-  await checkRosters(msgClient, slpClient);
-});
+const jobs: Cron[] = [
+  Cron(sundayMorning, {
+    name: "Roster check Sunday at 11:00am",
+    timezone: "US/Central"
+  }, async () => {
+      console.info("Running check...");
+      await checkRosters(msgClient, slpClient);
+  }),
+
+  Cron(sundayPrimetime, {
+    name: "Roster check Sunday at 6:30pm",
+    timezone: "US/Central"
+  }, async () => {
+      console.info("Running check...");
+      await checkRosters(msgClient, slpClient);
+  }),
+
+  Cron(mondayPrimetime, {
+    name: "Roster check Monday at 6:15pm",
+    timezone: "US/Central"
+  }, async () => {
+      console.info("Running check...");
+      await checkRosters(msgClient, slpClient);
+  }),
+
+  Cron(thursPrimeTime, {
+    name: "Roster check Thursday at 6:15pm",
+    timezone: "US/Central"
+  }, async () => {
+      console.info("Running check...");
+      await checkRosters(msgClient, slpClient);
+  })
+]; 
 
 async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient): Promise<void> {
   const nflState = await slpClient.getSportState("nfl");
@@ -88,7 +107,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient):
         starters: rost.starters
       };
     })
-    .map(ownerIdStarters  => { 
+    .map((ownerIdStarters: { owner_id: UserId, starters: PlayerId[] })  => { 
       const user: User | undefined = users.find(user => user.user_id === ownerIdStarters.owner_id);
       const team_name: string | undefined = user?.metadata.team_name;
       const username: string | undefined = user?.display_name;
@@ -99,9 +118,9 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient):
         starters: ownerIdStarters.starters
       };
     })
-    .map(ownerStarters => {
-      const startingPlayers: (NflPlayer | null)[] = ownerStarters.starters.map(starterId => {
-        const player: NflPlayer | null = allPlayers[starterId];
+    .map((ownerStarters: { team_name?: string, username?: string, starters: PlayerId[] }) => {
+      const startingPlayers: (NflPlayer | EmptyPlayer)[] = ownerStarters.starters.map(starterId => {
+        const player: NflPlayer | EmptyPlayer = allPlayers[starterId];
         return player;
       });
 
@@ -111,7 +130,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient):
         starters: startingPlayers
       };
     })
-    .map(value => { 
+    .map((value: { teamName?: string, username?: string, starters: (NflPlayer | EmptyPlayer)[] }) => { 
       return {
         username: value.username,
         teamName: value.teamName,
