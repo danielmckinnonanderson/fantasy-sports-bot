@@ -43,7 +43,7 @@ if (USER_ID === "") {
     + "Run the program again with arguments '--user-id <your user ID>'");
 }
 
-if (USER_ID === "") {
+if (BOT_ID === "") {
   throw new Error("No bot ID was passed to the executable!\n"
     + "Run the program again with arguments '--bot-id <your user ID>'");
 }

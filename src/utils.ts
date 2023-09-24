@@ -36,6 +36,7 @@ const isOnBye = (player: { team: NflTeam } | EmptyPlayer, seasonType: "pre" | "r
     return false;
   }
 
+  // TODO - match team with bye week
   const onByeThisWeek = false;
   return onByeThisWeek;
 }
