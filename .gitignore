@@ -176,3 +176,6 @@ dist
 
 # Ignore sample data
 data
+
+# Build directory
+build

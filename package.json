@@ -2,6 +2,9 @@
   "name": "fantasy-sports-bot",
   "module": "main.ts",
   "type": "module",
+  "scripts": {
+    "build": "bun build --compile main.ts --outfile ./build/ff-bot"
+  },
   "devDependencies": {
     "bun-types": "latest"
   },

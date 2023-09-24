@@ -1,3 +1,4 @@
+import { Cron } from "croner";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
 import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, Position, Status, User, UserId } from "./src/sleeper/types";
@@ -51,117 +52,127 @@ if (USER_ID === "") {
 const slpClient = new SleeperClient();
 const msgClient = new GroupmeClient(BOT_ID);
 
-const nflState = await slpClient.getSportState("nfl");
-if (!nflState) {
-  throw new Error("Could not get sport state for NFL");
-}
+// Finally, setup cron job timings
+const next = "50 20 * * 6";
 
-const rosters = await slpClient.getRostersInLeague(LEAGUE_ID);
-if (!rosters) {
-  throw new Error("Could not get rosters for league with ID '" + LEAGUE_ID + "'");
-}
+const job = Cron(next, {
+  name: "Roster check Saturday at 8:50pm",
+  timezone: "US/Central"
+}, async () => {
+  console.info("Running check...");
+  await checkRosters(msgClient, slpClient);
+});
 
-const users = await slpClient.getUsersInLeague(LEAGUE_ID);
-if (!users) {
-  throw new Error("Could not get users in league with ID '" + LEAGUE_ID + "'");
-}
+async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient): Promise<void> {
+  const nflState = await slpClient.getSportState("nfl");
+  if (!nflState) {
+    throw new Error("Could not get sport state for NFL");
+  }
 
-const allPlayers = await cachedGetPlayers(slpClient);
+  const rosters = await slpClient.getRostersInLeague(LEAGUE_ID);
+  if (!rosters) {
+    throw new Error("Could not get rosters for league with ID '" + LEAGUE_ID + "'");
+  }
 
-rosters
-  .map(rost => { 
-    return { 
-      owner_id: rost.owner_id,
-      starters: rost.starters
-    };
-  })
-  .map(ownerIdStarters  => { 
-    const user: User | undefined = users.find(user => user.user_id === ownerIdStarters.owner_id);
-    const team_name: string | undefined = user?.metadata.team_name;
-    const username: string | undefined = user?.display_name;
+  const users = await slpClient.getUsersInLeague(LEAGUE_ID);
+  if (!users) {
+    throw new Error("Could not get users in league with ID '" + LEAGUE_ID + "'");
+  }
 
-    return { 
-      team_name,
-      username,
-      starters: ownerIdStarters.starters
-    };
-  })
-  .map(ownerStarters => {
-    const startingPlayers: (NflPlayer | null)[] = ownerStarters.starters.map(starterId => {
-      const player: NflPlayer | null = allPlayers[starterId];
-      return player;
-    });
+  const allPlayers = await cachedGetPlayers(slpClient);
 
-    return {
-      teamName: ownerStarters.team_name,
-      username: ownerStarters.username,
-      starters: startingPlayers
-    };
-  })
-  .map(value => { 
-    return {
-      username: value.username,
-      teamName: value.teamName,
-      starters: value.starters.map((player, index) => { 
-        return player 
-          ? {
-            player: {
-              firstName: player.first_name,
-              lastName: player.last_name,
-              injuryStatus: player.injury_status,
-              status: player.status,
-              availPositions: player.fantasy_positions,
-            },
-            startingAt: lookupPosition(index)
-          }
-          : {
-            player: null as EmptyPlayer,
-            startingAt: lookupPosition(index)
-          };
-      })
-    };
-  })
-  .map(value => {
-    const empties   = value.starters.filter((st) => st.player == null as EmptyPlayer);
-    const injured   = value.starters.filter((st) => Predicates.isInjured(st.player as { injuryStatus: InjuryStatus } | EmptyPlayer));
-    const inactives = value.starters.filter((st) => Predicates.isInactive(st.player as { status: Status, availPositions: FantasyPosition[] } | EmptyPlayer));
-    const byes      = value.starters.filter((st) => Predicates.isOnBye(st.player as { team: NflTeam } | EmptyPlayer, nflState.season_type, nflState.week));
+  rosters
+    .map(rost => { 
+      return { 
+        owner_id: rost.owner_id,
+        starters: rost.starters
+      };
+    })
+    .map(ownerIdStarters  => { 
+      const user: User | undefined = users.find(user => user.user_id === ownerIdStarters.owner_id);
+      const team_name: string | undefined = user?.metadata.team_name;
+      const username: string | undefined = user?.display_name;
 
-    return {
-      username: value.username,
-      teamName: value.teamName,
-      invalidStarters: {
-        empties,
-        injured,
-        inactives,
-        byes
+      return { 
+        team_name,
+        username,
+        starters: ownerIdStarters.starters
+      };
+    })
+    .map(ownerStarters => {
+      const startingPlayers: (NflPlayer | null)[] = ownerStarters.starters.map(starterId => {
+        const player: NflPlayer | null = allPlayers[starterId];
+        return player;
+      });
+
+      return {
+        teamName: ownerStarters.team_name,
+        username: ownerStarters.username,
+        starters: startingPlayers
+      };
+    })
+    .map(value => { 
+      return {
+        username: value.username,
+        teamName: value.teamName,
+        starters: value.starters.map((player, index) => { 
+          return player 
+            ? {
+              player: {
+                firstName: player.first_name,
+                lastName: player.last_name,
+                injuryStatus: player.injury_status,
+                status: player.status,
+                availPositions: player.fantasy_positions,
+              },
+              startingAt: lookupPosition(index)
+            }
+            : {
+              player: null as EmptyPlayer,
+              startingAt: lookupPosition(index)
+            };
+        })
+      };
+    })
+    .map(value => {
+      const empties   = value.starters.filter((st) => st.player == null as EmptyPlayer);
+      const injured   = value.starters.filter((st) => Predicates.isInjured(st.player as { injuryStatus: InjuryStatus } | EmptyPlayer));
+      const inactives = value.starters.filter((st) => Predicates.isInactive(st.player as { status: Status, availPositions: FantasyPosition[] } | EmptyPlayer));
+      const byes      = value.starters.filter((st) => Predicates.isOnBye(st.player as { team: NflTeam } | EmptyPlayer, nflState.season_type, nflState.week));
+
+      return {
+        username: value.username,
+        teamName: value.teamName,
+        invalidStarters: {
+          empties,
+          injured,
+          inactives,
+          byes
+        }
       }
-    }
-  })
-  .forEach(value => {
-    value.invalidStarters.empties.forEach(empty => {
-      const emptyStarterText = `${value.username} (${value.teamName}) is not starting a player at ${empty.startingAt}!`;
-      const ok = msgClient.postBotMessage(emptyStarterText);
-    });
+    })
+    .forEach(value => {
+      value.invalidStarters.empties.forEach(empty => {
+        const emptyStarterText = `🕳️ ${value.username} (${value.teamName}) is not starting a player at ${empty.startingAt}! 🕳️`;
+        const ok = msgClient.postBotMessage(emptyStarterText);
+      });
 
-    value.invalidStarters.injured.forEach(inj => {
-      const injStarterText = `${value.username} (${value.teamName}) is 
-          starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}!`;
-      const ok = msgClient.postBotMessage(injStarterText);
-    });
+      value.invalidStarters.injured.forEach(inj => {
+        const injStarterText = `🏥 ${value.username} (${value.teamName}) is starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}! 🏥`;
+        const ok = msgClient.postBotMessage(injStarterText);
+      });
 
-    value.invalidStarters.inactives.forEach(inac => {
-      const inacStarterText = `${value.username} (${value.teamName}) is 
-          starting ${inac.player?.firstName + " " + inac.player?.lastName} (${inac.player?.status?.toLocaleUpperCase()}) at ${inac.startingAt}!`;
-      const ok = msgClient.postBotMessage(inacStarterText);
-    });
+      value.invalidStarters.inactives.forEach(inac => {
+        const inacStarterText = `🚷 ${value.username} (${value.teamName}) is starting ${inac.player?.firstName + " " + inac.player?.lastName} (${inac.player?.status?.toLocaleUpperCase()}) at ${inac.startingAt}! 🚷`;
+        const ok = msgClient.postBotMessage(inacStarterText);
+      });
 
-    value.invalidStarters.byes.forEach(bye => {
-      const byeStarterText = `${value.username} (${value.teamName}) is 
-          starting ${bye.player?.firstName + " " + bye.player?.lastName} at ${bye.startingAt}!`;
-      const ok = msgClient.postBotMessage(byeStarterText);
+      value.invalidStarters.byes.forEach(bye => {
+        const byeStarterText = `💤 ${value.username} (${value.teamName}) is starting ${bye.player?.firstName + " " + bye.player?.lastName} at ${bye.startingAt}! 💤`;
+        const ok = msgClient.postBotMessage(byeStarterText);
+      });
     });
-  });
+}
 
 
 async function cachedGetPlayers(client: SleeperClient): Promise<AllPlayers> {
