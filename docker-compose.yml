@@ -1,0 +1,29 @@
+version: '3'
+services:
+  ff-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      BOT_ID: $BOT_ID
+      LEAGUE_ID: $LEAGUE_ID
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres 
+
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_DB: 'todo-name' 
+      - POSTGRES_USER: 'todo-username'
+      - POSTGRES_PASSWORD: 'todo-pw'
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: ./data
