@@ -5,10 +5,13 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      BOT_ID: $BOT_ID
-      LEAGUE_ID: $LEAGUE_ID
+      BOT_ID: ${BOT_ID}
+      LEAGUE_ID: ${LEAGUE_ID}
     ports:
       - "3000:3000"
     depends_on:
@@ -17,13 +20,13 @@ services:
   postgres:
     image: postgres:14
     environment:
-      - POSTGRES_DB: 'todo-name' 
-      - POSTGRES_USER: 'todo-username'
-      - POSTGRES_PASSWORD: 'todo-pw'
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    # volumes:
+    #   - postgres_data:/var/lib/postgresql/data
 
-volumes:
-  postgres_data: ./data
+# volumes:
+#   postgres_data: ./data
