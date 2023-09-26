@@ -16,8 +16,7 @@ async function main() {
   // Finally, setup cron job timings
   const sundayMorning = "0 11 * * 0";
   const sundayPrimetime = "30 18 * * 0";
-  // TODO - Revert
-  const mondayPrimetime = "15 20 * 9-12 1";
+  const mondayPrimetime = "15 18 * 9-12 1";
   const thursPrimeTime = "15 18 * 9-12 4";
 
   const jobs: Cron[] = [
@@ -55,7 +54,7 @@ async function main() {
   ]; 
 }
 
-function getConfig() {
+function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
   let LEAGUE_ID: LeagueId = "";
   let BOT_ID: BotId = "";
 

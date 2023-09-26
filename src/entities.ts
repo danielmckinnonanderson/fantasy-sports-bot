@@ -13,14 +13,21 @@ type FantasySeason =
 // Database entity representing a completed matchup for
 //  a given week.
 @Entity()
-class WeeklyMatchup {
-    @PrimaryGeneratedColumn() id!: MatchupID;
+export default class WeeklyMatchup {
+
+    @PrimaryGeneratedColumn("identity") id!: MatchupID;
 
     // TODO - schema
-    @Column() ownerName!: string;
-    @Column() teamName!: string;
+    @Column() ownerA!: string;
+    @Column() teamA!: string;
+    @Column("float") pointsA!: number;
+
+    @Column() ownerB!: string;
+    @Column() teamB!: string;
+    @Column("float") pointsB!: number;
+
     @Column("string") season!: FantasySeason;
     @Column("int8") week!: NflSeasonWeek;
+    @Column("string") seasonType!: "regular" | "post"
 }
 
-export default { WeeklyMatchup };
