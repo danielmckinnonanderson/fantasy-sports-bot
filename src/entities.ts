@@ -29,5 +29,9 @@ export default class WeeklyMatchup {
     @Column("string") season!: FantasySeason;
     @Column("int8") week!: NflSeasonWeek;
     @Column("string") seasonType!: "regular" | "post"
+
+    @Column("string") specialMatchup!: "playoffs" | "championship" | "loserbracket" | "toiletbowl" | null;
+
+    @Column() teamAWon!: boolean;
 }
 
