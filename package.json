@@ -12,6 +12,9 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "croner": "^7.0.1"
+    "croner": "^7.0.1",
+    "pg": "^8.11.3",
+    "reflect-metadata": "^0.1.13",
+    "typeorm": "^0.3.17"
   }
 }

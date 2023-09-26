@@ -1,104 +1,122 @@
 import { Cron } from "croner";
+import "reflect-metadata";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
 import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
 
-let LEAGUE_ID: LeagueId = "";
-let BOT_ID: BotId = "";
 
-// Skip first two args since we don't care about path
-//   to Bun or path to program
-for (let i = 2; i < Bun.argv.length; i++) {
-  const value = Bun.argv[i];
+async function main() {
+  const { BOT_ID, LEAGUE_ID } = getConfig();
 
-  switch (value) {
-    case "--league-id": {
-      LEAGUE_ID = Bun.argv[i + 1];
-      break;
-    };
-    case "--bot-id": {
-      BOT_ID = Bun.argv[i + 1];
-      break;
-    };
-    default: {
-      break;
+  // Setup client & all required Sleeper data
+  const slpClient = new SleeperClient();
+  const msgClient = new GroupmeClient(BOT_ID);
+
+  // Finally, setup cron job timings
+  const sundayMorning = "0 11 * * 0";
+  const sundayPrimetime = "30 18 * * 0";
+  // TODO - Revert
+  const mondayPrimetime = "15 20 * 9-12 1";
+  const thursPrimeTime = "15 18 * 9-12 4";
+
+  const jobs: Cron[] = [
+    Cron(sundayMorning, {
+      name: "Roster check Sunday at 11:00am",
+      timezone: "US/Central"
+    }, async () => {
+        console.info("Running check...");
+        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+    }),
+
+    Cron(sundayPrimetime, {
+      name: "Roster check Sunday at 6:30pm",
+      timezone: "US/Central"
+    }, async () => {
+        console.info("Running check...");
+        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+    }),
+
+    Cron(mondayPrimetime, {
+      name: "Roster check Monday at 6:15pm",
+      timezone: "US/Central"
+    }, async () => {
+        console.info("Running check...");
+        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+    }),
+
+    Cron(thursPrimeTime, {
+      name: "Roster check Thursday at 6:15pm",
+      timezone: "US/Central"
+    }, async () => {
+        console.info("Running check...");
+        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+    })
+  ]; 
+}
+
+function getConfig() {
+  let LEAGUE_ID: LeagueId = "";
+  let BOT_ID: BotId = "";
+
+  // Skip first two args since we don't care about path
+  //   to Bun or path to program
+  for (let i = 2; i < Bun.argv.length; i++) {
+    const value = Bun.argv[i];
+
+    switch (value) {
+      case "--league-id": {
+        LEAGUE_ID = Bun.argv[i + 1];
+        break;
+      };
+      case "--bot-id": {
+        BOT_ID = Bun.argv[i + 1];
+        break;
+      };
+      default: {
+        break;
+      }
     }
+  }
+
+  // Panic if required arguments are not provided
+  if (LEAGUE_ID === "") {
+    throw new Error("No league ID was passed to the executable!\n"
+      + "Run the program again with arguments '--league-id <your league ID>'");
+  }
+
+  if (BOT_ID === "") {
+    throw new Error("No bot ID was passed to the executable!\n"
+      + "Run the program again with arguments '--bot-id <your user ID>'");
+  }
+
+  return {
+    BOT_ID,
+    LEAGUE_ID
   }
 }
 
-// Panic if required arguments are not provided
-if (LEAGUE_ID === "") {
-  throw new Error("No league ID was passed to the executable!\n"
-    + "Run the program again with arguments '--league-id <your league ID>'");
-}
 
-if (BOT_ID === "") {
-  throw new Error("No bot ID was passed to the executable!\n"
-    + "Run the program again with arguments '--bot-id <your user ID>'");
-}
-
-// Setup client & all required Sleeper data
-const slpClient = new SleeperClient();
-const msgClient = new GroupmeClient(BOT_ID);
-
-// Finally, setup cron job timings
-const sundayMorning = "0 11 * * 0";
-const sundayPrimetime = "30 18 * * 0";
-const mondayPrimetime = "15 18 * 9-12 1";
-const thursPrimeTime = "15 18 * 9-12 4";
-
-const jobs: Cron[] = [
-  Cron(sundayMorning, {
-    name: "Roster check Sunday at 11:00am",
-    timezone: "US/Central"
-  }, async () => {
-      console.info("Running check...");
-      await checkRosters(msgClient, slpClient);
-  }),
-
-  Cron(sundayPrimetime, {
-    name: "Roster check Sunday at 6:30pm",
-    timezone: "US/Central"
-  }, async () => {
-      console.info("Running check...");
-      await checkRosters(msgClient, slpClient);
-  }),
-
-  Cron(mondayPrimetime, {
-    name: "Roster check Monday at 6:15pm",
-    timezone: "US/Central"
-  }, async () => {
-      console.info("Running check...");
-      await checkRosters(msgClient, slpClient);
-  }),
-
-  Cron(thursPrimeTime, {
-    name: "Roster check Thursday at 6:15pm",
-    timezone: "US/Central"
-  }, async () => {
-      console.info("Running check...");
-      await checkRosters(msgClient, slpClient);
-  })
-]; 
-
-async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient): Promise<void> {
+async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, leagueId: LeagueId): Promise<void> {
   const nflState = await slpClient.getSportState("nfl");
   if (!nflState) {
     throw new Error("Could not get sport state for NFL");
   }
 
-  const rosters = await slpClient.getRostersInLeague(LEAGUE_ID);
+  const rosters = await slpClient.getRostersInLeague(leagueId);
   if (!rosters) {
-    throw new Error("Could not get rosters for league with ID '" + LEAGUE_ID + "'");
+    throw new Error("Could not get rosters for league with ID '" + leagueId + "'");
   }
 
-  const users = await slpClient.getUsersInLeague(LEAGUE_ID);
+  const users = await slpClient.getUsersInLeague(leagueId);
   if (!users) {
-    throw new Error("Could not get users in league with ID '" + LEAGUE_ID + "'");
+    throw new Error("Could not get users in league with ID '" + leagueId + "'");
   }
 
-  const allPlayers = await cachedGetPlayers(slpClient);
+  const allPlayers = await slpClient.getAllPlayers("nfl");
+  if (!allPlayers) {
+    throw new Error("Could not get all NFL players");
+  }
 
   rosters
     .map(rost => { 
@@ -194,6 +212,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient):
 }
 
 
+// TODO - Revisit removing this entirely
 async function cachedGetPlayers(client: SleeperClient): Promise<AllPlayers> {
   const path = "./data/all-players.json";
   const allPlayersLocal = Bun.file(path);
@@ -213,4 +232,3 @@ async function cachedGetPlayers(client: SleeperClient): Promise<AllPlayers> {
 
   return await allPlayersLocal.json();
 }
-
