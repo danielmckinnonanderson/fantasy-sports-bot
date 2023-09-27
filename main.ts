@@ -1,12 +1,30 @@
 import { Cron } from "croner";
 import "reflect-metadata";
+import { Bao } from "baojs";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
-import { AllPlayers, EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
+import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
+import Bun from "bun";
 
+console.info("Starting app...");
+
+const app = new Bao();
+
+app.get("/health", async (ctx) => {
+  return ctx.sendText("\"OK\"", { status: 200 });
+});
+
+app.listen({
+  port: 3000,
+});
+
+console.info("Listening on port 3000");
+
+main();
 
 async function main() {
+  console.info("Reading config from environment...");
   const { BOT_ID, LEAGUE_ID } = getConfig();
 
   // Setup client & all required Sleeper data
@@ -16,8 +34,10 @@ async function main() {
   // Finally, setup cron job timings
   const sundayMorning = "0 11 * * 0";
   const sundayPrimetime = "30 18 * * 0";
-  const mondayPrimetime = "15 18 * 9-12 1";
-  const thursPrimeTime = "15 18 * 9-12 4";
+  const mondayPrimetime = "15 18 * * 1";
+  const thursPrimeTime = "15 18 * * 4";
+
+  console.info("Setting up cron jobs...");
 
   const jobs: Cron[] = [
     Cron(sundayMorning, {
@@ -25,7 +45,8 @@ async function main() {
       timezone: "US/Central"
     }, async () => {
         console.info("Running check...");
-        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        console.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(sundayPrimetime, {
@@ -33,7 +54,8 @@ async function main() {
       timezone: "US/Central"
     }, async () => {
         console.info("Running check...");
-        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        console.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(mondayPrimetime, {
@@ -41,7 +63,8 @@ async function main() {
       timezone: "US/Central"
     }, async () => {
         console.info("Running check...");
-        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        console.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(thursPrimeTime, {
@@ -49,7 +72,8 @@ async function main() {
       timezone: "US/Central"
     }, async () => {
         console.info("Running check...");
-        await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
+        console.info("Roster check complete! Totals:\n", count(results));
     })
   ]; 
 }
@@ -96,7 +120,7 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
 }
 
 
-async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, leagueId: LeagueId): Promise<void> {
+async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, leagueId: LeagueId) {
   const nflState = await slpClient.getSportState("nfl");
   if (!nflState) {
     throw new Error("Could not get sport state for NFL");
@@ -117,7 +141,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
     throw new Error("Could not get all NFL players");
   }
 
-  rosters
+  return rosters
     .map(rost => { 
       return { 
         owner_id: rost.owner_id,
@@ -148,10 +172,12 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       };
     })
     .map((value: { teamName?: string, username?: string, starters: (NflPlayer | EmptyPlayer)[] }) => { 
+      console.info(value.teamName);
       return {
         username: value.username,
         teamName: value.teamName,
         starters: value.starters.map((player, index) => { 
+          console.info("Player is kamara", player?.last_name.toLocaleLowerCase() == "kamara", index);
           return player 
             ? {
               player: {
@@ -187,47 +213,49 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
         }
       }
     })
-    .forEach(value => {
+    .map((value) => {
       value.invalidStarters.empties.forEach(empty => {
         const emptyStarterText = `🕳️ ${value.username} (${value.teamName}) is not starting a player at ${empty.startingAt}! 🕳️`;
+        console.info(emptyStarterText);
         const ok = msgClient.postBotMessage(emptyStarterText);
       });
 
       value.invalidStarters.injured.forEach(inj => {
         const injStarterText = `🏥 ${value.username} (${value.teamName}) is starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}! 🏥`;
+        console.info(injStarterText);
         const ok = msgClient.postBotMessage(injStarterText);
       });
 
-      value.invalidStarters.inactives.forEach(inac => {
-        const inacStarterText = `🚷 ${value.username} (${value.teamName}) is starting ${inac.player?.firstName + " " + inac.player?.lastName} (${inac.player?.status?.toLocaleUpperCase()}) at ${inac.startingAt}! 🚷`;
-        const ok = msgClient.postBotMessage(inacStarterText);
-      });
+      // value.invalidStarters.inactives.forEach(inac => {
+        // const inacStarterText = `🚷 ${value.username} (${value.teamName}) is starting ${inac.player?.firstName + " " + inac.player?.lastName} (${inac.player?.status?.toLocaleUpperCase()}) at ${inac.startingAt}! 🚷`;
+        // console.info(inacStarterText);
+        // const ok = msgClient.postBotMessage(inacStarterText);
+      // });
 
       value.invalidStarters.byes.forEach(bye => {
         const byeStarterText = `💤 ${value.username} (${value.teamName}) is starting ${bye.player?.firstName + " " + bye.player?.lastName} at ${bye.startingAt}! 💤`;
+        console.info(byeStarterText);
         const ok = msgClient.postBotMessage(byeStarterText);
       });
+
+      return value;
     });
 }
 
+function count(rosterCheckResult: any[])  {
+  let result = {
+    injured: 0,
+    empty: 0,
+    inactive: 0,
+    onBye: 0,
+  };
 
-// TODO - Revisit removing this entirely
-async function cachedGetPlayers(client: SleeperClient): Promise<AllPlayers> {
-  const path = "./data/all-players.json";
-  const allPlayersLocal = Bun.file(path);
-  const exists = await allPlayersLocal.exists();
+  rosterCheckResult.forEach(value => {
+    result.onBye += value.invalidStarters.byes.length;
+    result.inactive += value.invalidStarters.inactives.length;
+    result.injured += value.invalidStarters.injured.length;
+    result.empty += value.invalidStarters.empties.length;
+  });
 
-  // TODO - more sophisticated caching logic, to refresh the value when it goes stale. Can of worms but oh well
-  if (!exists) {
-    const players = await client.getAllPlayers("nfl");
-
-    if (!players) {
-      throw new Error("Could not get all NFL players from Sleeper API!");
-    }
-
-    const written = await Bun.write(allPlayersLocal, JSON.stringify(players, null, 2));
-    return players;
-  }
-
-  return await allPlayersLocal.json();
+  return result;
 }
