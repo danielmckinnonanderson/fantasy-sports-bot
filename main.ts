@@ -172,12 +172,10 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       };
     })
     .map((value: { teamName?: string, username?: string, starters: (NflPlayer | EmptyPlayer)[] }) => { 
-      console.info(value.teamName);
       return {
         username: value.username,
         teamName: value.teamName,
         starters: value.starters.map((player, index) => { 
-          console.info("Player is kamara", player?.last_name.toLocaleLowerCase() == "kamara", index);
           return player 
             ? {
               player: {
