@@ -16,6 +16,7 @@
     "croner": "^7.0.1",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.1.13",
-    "typeorm": "^0.3.17"
+    "typeorm": "^0.3.17",
+    "winston": "^3.10.0"
   }
 }

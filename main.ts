@@ -5,9 +5,22 @@ import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
 import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
-import Bun from "bun";
+import { createLogger, format, transports } from "winston";
 
-console.info("Starting app...");
+const fmt = format.printf(({ level, message, timestamp}) => {
+  return `${timestamp} [${level}] : ${message}`;
+});
+
+const logger = createLogger({
+  format: format.combine(
+    format.timestamp(),
+    format.colorize(),
+    fmt,
+  ),
+  transports: [new transports.Console()]
+});
+
+logger.info("Starting app...");
 
 const app = new Bao();
 
@@ -19,13 +32,14 @@ app.listen({
   port: 3000,
 });
 
-console.info("Listening on port 3000");
+logger.info("Listening on port 3000");
 
 main();
 
 async function main() {
-  console.info("Reading config from environment...");
+  logger.info("Reading config from environment...");
   const { BOT_ID, LEAGUE_ID } = getConfig();
+  logger.info("Done loading config!");
 
   // Setup client & all required Sleeper data
   const slpClient = new SleeperClient();
@@ -37,43 +51,43 @@ async function main() {
   const mondayPrimetime = "15 18 * * 1";
   const thursPrimeTime = "15 18 * * 4";
 
-  console.info("Setting up cron jobs...");
+  logger.info("Setting up cron jobs");
 
   const jobs: Cron[] = [
     Cron(sundayMorning, {
       name: "Roster check Sunday at 11:00am",
       timezone: "US/Central"
     }, async () => {
-        console.info("Running check...");
+        logger.info("Running check...");
         const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
-        console.info("Roster check complete! Totals:\n", count(results));
+        logger.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(sundayPrimetime, {
       name: "Roster check Sunday at 6:30pm",
       timezone: "US/Central"
     }, async () => {
-        console.info("Running check...");
+        logger.info("Running check...");
         const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
-        console.info("Roster check complete! Totals:\n", count(results));
+        logger.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(mondayPrimetime, {
       name: "Roster check Monday at 6:15pm",
       timezone: "US/Central"
     }, async () => {
-        console.info("Running check...");
+        logger.info("Running check...");
         const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
-        console.info("Roster check complete! Totals:\n", count(results));
+        logger.info("Roster check complete! Totals:\n", count(results));
     }),
 
     Cron(thursPrimeTime, {
       name: "Roster check Thursday at 6:15pm",
       timezone: "US/Central"
     }, async () => {
-        console.info("Running check...");
+        logger.info("Running check...");
         const results = await checkRosters(msgClient, slpClient, LEAGUE_ID);
-        console.info("Roster check complete! Totals:\n", count(results));
+        logger.info("Roster check complete! Totals:\n", count(results));
     })
   ]; 
 }
@@ -89,11 +103,11 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
 
     switch (value) {
       case "--league-id": {
-        LEAGUE_ID = Bun.argv[i + 1];
+        LEAGUE_ID = Bun.argv[i + 1].trim();
         break;
       };
       case "--bot-id": {
-        BOT_ID = Bun.argv[i + 1];
+        BOT_ID = Bun.argv[i + 1].trim();
         break;
       };
       default: {
@@ -104,11 +118,15 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
 
   // Panic if required arguments are not provided
   if (LEAGUE_ID === "") {
+    logger.error("No league ID");
+    process.exit(1);
     throw new Error("No league ID was passed to the executable!\n"
       + "Run the program again with arguments '--league-id <your league ID>'");
   }
 
   if (BOT_ID === "") {
+    logger.error("No boit ID");
+    process.exit(1);
     throw new Error("No bot ID was passed to the executable!\n"
       + "Run the program again with arguments '--bot-id <your user ID>'");
   }
@@ -120,24 +138,33 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
 }
 
 
+// Throws an error if any of the data required to check rosters cannot be fetched
 async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, leagueId: LeagueId) {
   const nflState = await slpClient.getSportState("nfl");
   if (!nflState) {
+    logger.error("Could not get sport state for NFL");
+    process.exit(1);
     throw new Error("Could not get sport state for NFL");
   }
 
   const rosters = await slpClient.getRostersInLeague(leagueId);
   if (!rosters) {
+    logger.error("Could not get rosters for league with ID '" + leagueId + "'");
+    process.exit(1);
     throw new Error("Could not get rosters for league with ID '" + leagueId + "'");
   }
 
   const users = await slpClient.getUsersInLeague(leagueId);
   if (!users) {
+    logger.error("Could not get users in league with ID '" + leagueId + "'");
+    process.exit(1);
     throw new Error("Could not get users in league with ID '" + leagueId + "'");
   }
 
   const allPlayers = await slpClient.getAllPlayers("nfl");
   if (!allPlayers) {
+    logger.error("Could not get all NFL players");
+    process.exit(1);
     throw new Error("Could not get all NFL players");
   }
 
@@ -214,26 +241,23 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
     .map((value) => {
       value.invalidStarters.empties.forEach(empty => {
         const emptyStarterText = `🕳️ ${value.username} (${value.teamName}) is not starting a player at ${empty.startingAt}! 🕳️`;
-        console.info(emptyStarterText);
+        logger.debug(emptyStarterText);
         const ok = msgClient.postBotMessage(emptyStarterText);
+        if (!ok) logger.error(`Could not post message for empty starter at '${empty.startingAt}'`);
       });
 
       value.invalidStarters.injured.forEach(inj => {
         const injStarterText = `🏥 ${value.username} (${value.teamName}) is starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}! 🏥`;
-        console.info(injStarterText);
+        logger.debug(injStarterText);
         const ok = msgClient.postBotMessage(injStarterText);
+        if (!ok) logger.error(`Could not post message for player on bye '${inj.player?.firstName} ${inj.player?.lastName}'`);
       });
-
-      // value.invalidStarters.inactives.forEach(inac => {
-        // const inacStarterText = `🚷 ${value.username} (${value.teamName}) is starting ${inac.player?.firstName + " " + inac.player?.lastName} (${inac.player?.status?.toLocaleUpperCase()}) at ${inac.startingAt}! 🚷`;
-        // console.info(inacStarterText);
-        // const ok = msgClient.postBotMessage(inacStarterText);
-      // });
 
       value.invalidStarters.byes.forEach(bye => {
         const byeStarterText = `💤 ${value.username} (${value.teamName}) is starting ${bye.player?.firstName + " " + bye.player?.lastName} at ${bye.startingAt}! 💤`;
-        console.info(byeStarterText);
+        logger.debug(byeStarterText);
         const ok = msgClient.postBotMessage(byeStarterText);
+        if (!ok) logger.error(`Could not post message for player on bye '${bye.player?.firstName} ${bye.player?.lastName}'`);
       });
 
       return value;
@@ -245,11 +269,11 @@ function count(rosterCheckResult: any[])  {
     injured: 0,
     empty: 0,
     inactive: 0,
-    onBye: 0,
+    bye: 0,
   };
 
   rosterCheckResult.forEach(value => {
-    result.onBye += value.invalidStarters.byes.length;
+    result.bye += value.invalidStarters.byes.length;
     result.inactive += value.invalidStarters.inactives.length;
     result.injured += value.invalidStarters.injured.length;
     result.empty += value.invalidStarters.empties.length;
