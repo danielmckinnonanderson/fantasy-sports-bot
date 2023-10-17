@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { Bao } from "baojs";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
-import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, Matchup, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
+import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, Matchup, NflPlayer, NflTeam, PlayerId, PlayersPoints, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
 import { createLogger, format, transports } from "winston";
 
@@ -64,7 +64,6 @@ app.post("/check", async (ctx) => {
   const counts = count(results);
 
   const resp = JSON.stringify({ "success": true, counts });
-  logger.debug(resp)
   return ctx.sendText(resp, { status: 200 });
 });
 
@@ -178,8 +177,8 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
 }
 
 type HeadToHeadMatchup = {
-  self: Matchup;
-  opp: Matchup;
+  self: PlayersPoints;
+  opp: PlayersPoints;
 };
 
 // Throws an error if any of the data required to check rosters cannot be fetched
@@ -285,8 +284,8 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       });
 
       const h2h: HeadToHeadMatchup = {
-        self: self!,
-        opp: opponent!
+        self: self!.players_points,
+        opp: opponent!.players_points
       };
 
       return {
@@ -301,7 +300,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       const byes      = value.starters.filter((st) => Predicates.isOnBye(st.player as { team: NflTeam } | EmptyPlayer, nflState.season_type, nflState.week));
 
       return {
-        ...value,
+        h2h: value.h2h,
         invalidStarters: {
           empties,
           injured,

@@ -54,7 +54,11 @@ export type Matchup = {
   matchup_id: number;
   points: number;
   custom_points: any;
-  players_points: { [key: string]: number };
+  players_points: PlayersPoints;
+};
+
+export type PlayersPoints = {
+  [key: PlayerId]: number;
 };
 
 export type League = {
