@@ -1,6 +1,6 @@
 export type UserId = string;
 export type LeagueId = string;
-export type RosterId = string;
+export type RosterId = number;
 export type DraftId = string;
 export type PlayerId = string;
 export type EmptyPlayer = null;
@@ -45,6 +45,16 @@ export type Roster = {
   metadata: any;
   league_id: LeagueId;
   co_owners: any;
+};
+
+export type Matchup = {
+  starters: PlayerId[];
+  roster_id: RosterId;
+  players: PlayerId[];
+  matchup_id: number;
+  points: number;
+  custom_points: any;
+  players_points: { [key: string]: number };
 };
 
 export type League = {

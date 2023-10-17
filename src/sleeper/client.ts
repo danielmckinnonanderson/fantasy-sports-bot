@@ -1,4 +1,4 @@
-import { AllPlayers, League, LeagueId, PlayerId, Roster, SportState, User, UserId } from "./types";
+import { AllPlayers, League, LeagueId, Matchup, NflSeasonWeek, PlayerId, Roster, SportState, User, UserId } from "./types";
 
 const BASE_URL = "https://api.sleeper.app/v1";
 
@@ -47,6 +47,13 @@ export default class SleeperClient {
 
   public async getSportState(sport: "nfl"): Promise<SportState | null> {
     const result = await fetch(BASE_URL + "/state/" + sport);
+    return result.ok
+      ? result.json()
+      : null;
+  }
+
+  public async getMatchups(leagueId: LeagueId, week: NflSeasonWeek): Promise<Matchup[] | null> {
+    const result = await fetch(BASE_URL + "/league/" + leagueId + "/matchups/" + week);
     return result.ok
       ? result.json()
       : null;

@@ -1,4 +1,4 @@
-import { EmptyPlayer, FantasyPosition, InjuryStatus, NflSeasonWeek, NflTeam, Status } from './sleeper/types';
+import { EmptyPlayer, FantasyPosition, InjuryStatus, Matchup, NflPlayer, NflSeasonWeek, NflTeam, PlayerId, Status } from './sleeper/types';
 
 const isInjured = (player: { injuryStatus: InjuryStatus } | EmptyPlayer): boolean => {
   if (player == null as EmptyPlayer) {
@@ -41,10 +41,29 @@ const isOnBye = (player: { team: NflTeam } | EmptyPlayer, seasonType: "pre" | "r
   return onByeThisWeek;
 }
 
+// Going with weird grammar here to fit with the my convention for predicates lol
+const isAlreadyPlayed = (
+  value: {
+    player: { player_id: PlayerId } | EmptyPlayer
+  },
+  h2h: { self: Matchup, opp: Matchup },
+  week?: NflSeasonWeek): boolean => {
+
+  // if (!week) {
+  //   // No info on current week, so we can't determine if you already played
+  //   return false;
+  // }
+
+  const pointsScored = h2h.self.players_points[value.player!.player_id];
+
+  return pointsScored != 0.000;
+}
+
 const Predicates = {
   isInjured,
   isInactive,
-  isOnBye
+  isOnBye,
+  isAlreadyPlayed
 };
 
 

@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { Bao } from "baojs";
 import GroupmeClient, { BotId } from "./src/groupme/client";
 import SleeperClient from "./src/sleeper/client";
-import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
+import { EmptyPlayer, FantasyPosition, InjuryStatus, LeagueId, Matchup, NflPlayer, NflTeam, PlayerId, Position, Status, User, UserId } from "./src/sleeper/types";
 import { Predicates, lookupPosition } from "./src/utils";
 import { createLogger, format, transports } from "winston";
 
@@ -177,6 +177,10 @@ function getConfig(): { BOT_ID: BotId, LEAGUE_ID: LeagueId } {
   };
 }
 
+type HeadToHeadMatchup = {
+  self: Matchup;
+  opp: Matchup;
+};
 
 // Throws an error if any of the data required to check rosters cannot be fetched
 async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, leagueId: LeagueId) {
@@ -201,6 +205,13 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
     throw new Error("Could not get users in league with ID '" + leagueId + "'");
   }
 
+  const matchups = await slpClient.getMatchups(leagueId, nflState.week!);
+  if (!matchups) {
+    logger.error("Could not get matchups for week " + nflState.week);
+    process.exit(1);
+    throw new Error("Could not get matchups");
+  }
+
   const allPlayers = await slpClient.getAllPlayers("nfl");
   if (!allPlayers) {
     logger.error("Could not get all NFL players");
@@ -219,6 +230,7 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       const user: User | undefined = users.find(user => user.user_id === ownerIdStarters.owner_id);
       const team_name: string | undefined = user?.metadata.team_name;
       const username: string | undefined = user?.display_name;
+
 
       return { 
         team_name,
@@ -246,10 +258,12 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
           return player 
             ? {
               player: {
+                id: player.player_id,
                 firstName: player.first_name,
                 lastName: player.last_name,
                 injuryStatus: player.injury_status,
                 status: player.status,
+                team: player.team,
                 availPositions: player.fantasy_positions,
               },
               startingAt: lookupPosition(index)
@@ -262,14 +276,32 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
       };
     })
     .map(value => {
+      const self = matchups.find(m => {
+        return m.roster_id == rosters.find(r => r.roster_id)!.roster_id;
+      });
+
+      const opponent = matchups.find(m => {
+        return m.matchup_id == self?.matchup_id && m.roster_id !== self.roster_id;
+      });
+
+      const h2h: HeadToHeadMatchup = {
+        self: self!,
+        opp: opponent!
+      };
+
+      return {
+        ...value,
+        h2h
+      };
+    })
+    .map(value => {
       const empties   = value.starters.filter((st) => st.player == null as EmptyPlayer);
       const injured   = value.starters.filter((st) => Predicates.isInjured(st.player as { injuryStatus: InjuryStatus } | EmptyPlayer));
       const inactives = value.starters.filter((st) => Predicates.isInactive(st.player as { status: Status, availPositions: FantasyPosition[] } | EmptyPlayer));
       const byes      = value.starters.filter((st) => Predicates.isOnBye(st.player as { team: NflTeam } | EmptyPlayer, nflState.season_type, nflState.week));
 
       return {
-        username: value.username,
-        teamName: value.teamName,
+        ...value,
         invalidStarters: {
           empties,
           injured,
@@ -282,7 +314,13 @@ async function checkRosters(msgClient: GroupmeClient, slpClient: SleeperClient, 
 
 // Side effects only. Returns value unchanged
 async function postMessages( msgClient: GroupmeClient, value: any ) {
+  if (!value.h2h) {
+    logger.warn("Don't have matchup information. Will post messages without checking if the player has played already.");
+  }
+
   value?.invalidStarters.empties.forEach(async (empty: { startingAt: string }) => {
+
+
     const emptyStarterText = `🕳️ ${value?.username} (${value?.teamName}) is not starting a player at ${empty.startingAt}! 🕳️`;
     logger.debug(emptyStarterText);
     const ok = await msgClient.postBotMessage(emptyStarterText);
@@ -290,10 +328,14 @@ async function postMessages( msgClient: GroupmeClient, value: any ) {
   });
 
   value?.invalidStarters.injured.forEach(async (inj: { player?: any , startingAt: string }) => {
-    const injStarterText = `🏥 ${value?.username} (${value?.teamName}) is starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}! 🏥`;
-    logger.debug(injStarterText);
-    const ok = await msgClient.postBotMessage(injStarterText);
-    if (!ok) logger.error(`Could not post message for player on bye '${inj.player?.firstName} ${inj.player?.lastName}'`);
+    const alreadyPlayed = !Predicates.isAlreadyPlayed( inj.player.player_id, value.h2h, undefined );
+    if (!alreadyPlayed) {
+      const injStarterText = `🏥 ${value?.username} (${value?.teamName}) is starting ${inj.player?.firstName + " " + inj.player?.lastName} (${inj.player?.injuryStatus}) at ${inj.startingAt}! 🏥`;
+      logger.debug(injStarterText);
+
+      const ok = await msgClient.postBotMessage(injStarterText);
+      if (!ok) logger.error(`Could not post message for player on bye '${inj.player?.firstName} ${inj.player?.lastName}'`);
+    }
   });
 
   value?.invalidStarters.byes.forEach(async (bye: { player?: any, startingAt: string }) => {
@@ -321,3 +363,4 @@ function count(rosterCheckResult: any[])  {
 
   return result;
 }
+
